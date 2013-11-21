@@ -346,6 +346,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 				opt_enum_val_list enum_val_list table_func_column_list
 				create_generic_options alter_generic_options
 				relation_expr_list dostmt_opt_list
+				opt_corresponding_clause
 
 %type <list>	opt_fdw_options fdw_options
 %type <defelt>	fdw_option
@@ -530,7 +531,7 @@ static Node *makeRecursiveViewSelect(char *relname, List *aliases, Node *query);
 	CHARACTER CHARACTERISTICS CHECK CHECKPOINT CLASS CLOSE
 	CLUSTER COALESCE COLLATE COLLATION COLUMN COMMENT COMMENTS COMMIT
 	COMMITTED CONCURRENTLY CONFIGURATION CONNECTION CONSTRAINT CONSTRAINTS
-	CONTENT_P CONTINUE_P CONVERSION_P COPY COST CREATE
+	CONTENT_P CONTINUE_P CONVERSION_P COPY CORRESPONDING COST CREATE
 	CROSS CSV CURRENT_P
 	CURRENT_CATALOG CURRENT_DATE CURRENT_ROLE CURRENT_SCHEMA
 	CURRENT_TIME CURRENT_TIMESTAMP CURRENT_USER CURSOR CYCLE
@@ -9294,17 +9295,17 @@ simple_select:
 					n->fromClause = list_make1($2);
 					$$ = (Node *)n;
 				}
-			| select_clause UNION opt_all select_clause
+			| select_clause UNION opt_all opt_corresponding_clause select_clause
 				{
-					$$ = makeSetOp(SETOP_UNION, $3, $1, $4);
+					$$ = makeSetOp(SETOP_UNION, $3, $1, $5);
 				}
-			| select_clause INTERSECT opt_all select_clause
+			| select_clause INTERSECT opt_all opt_corresponding_clause select_clause
 				{
-					$$ = makeSetOp(SETOP_INTERSECT, $3, $1, $4);
+					$$ = makeSetOp(SETOP_INTERSECT, $3, $1, $5);
 				}
-			| select_clause EXCEPT opt_all select_clause
+			| select_clause EXCEPT opt_all opt_corresponding_clause select_clause
 				{
-					$$ = makeSetOp(SETOP_EXCEPT, $3, $1, $4);
+					$$ = makeSetOp(SETOP_EXCEPT, $3, $1, $5);
 				}
 		;
 
@@ -9436,6 +9437,10 @@ opt_all:	ALL										{ $$ = TRUE; }
 			| DISTINCT								{ $$ = FALSE; }
 			| /*EMPTY*/								{ $$ = FALSE; }
 		;
+
+opt_corresponding_clause:
+ 			CORRESPONDING							{} 			
+ 		;
 
 /* We use (NIL) as a placeholder to indicate that all target expressions
  * should be placed in the DISTINCT list during parsetree analysis.
@@ -12566,6 +12571,7 @@ unreserved_keyword:
 			| CONTINUE_P
 			| CONVERSION_P
 			| COPY
+			| CORRESPONDING
 			| COST
 			| CSV
 			| CURRENT_P
