@@ -9439,7 +9439,8 @@ opt_all:	ALL										{ $$ = TRUE; }
 		;
 
 opt_corresponding_clause: 			
- 			CORRESPONDING							{ $$ = list_make1(NIL); }
+ 			CORRESPONDING BY '(' expr_list ')'		{ $$ = $4; }
+ 			| CORRESPONDING							{ $$ = list_make1(NIL); }
  			| /*EMPTY*/								{ $$ = NIL; } 			
  		;
 

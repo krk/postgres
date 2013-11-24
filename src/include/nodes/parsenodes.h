@@ -1156,7 +1156,14 @@ typedef struct SetOperationStmt
 	bool		all;			/* ALL specified? */
 	Node	   *larg;			/* left child */
 	Node	   *rarg;			/* right child */
-	/* Eventually add fields for CORRESPONDING spec here */
+	List	   *correspondingColumns; /* NIL: No corresponding,
+	 	 	 	 	 	 	 	 	   * else: CORRESPONDING or CORRESPONDING BY
+	 	 	 	 	 	 	 	 	   * matching columns. Not the original
+	 	 	 	 	 	 	 	 	   * clause. */
+	bool		hasCorrespondingBy;   /* If correspondingColumns is not NIL
+	 	 	 	 	 	 	 	 	   * then hasCorrespondingBy determines
+	 	 	 	 	 	 	 	 	   * its use as corresponding columns,
+	 	 	 	 	 	 	 	 	   * correspondingColumns is junk. */
 
 	/* Fields derived during parse analysis: */
 	List	   *colTypes;		/* OID list of output column type OIDs */
