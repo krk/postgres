@@ -147,7 +147,7 @@ static void insertSelectOptions(SelectStmt *stmt,
 								Node *limitOffset, Node *limitCount,
 								WithClause *withClause,
 								core_yyscan_t yyscanner);
-static Node *makeSetOp(SetOperation op, bool all, Node *larg, Node *rarg);
+static Node *makeSetOp(SetOperation op, bool all, List *correspondingClause, Node *larg, Node *rarg);
 static Node *doNegate(Node *n, int location);
 static void doNegateFloat(Value *v);
 static Node *makeAArrayExpr(List *elements, int location);
@@ -9297,15 +9297,15 @@ simple_select:
 				}
 			| select_clause UNION opt_all opt_corresponding_clause select_clause
 				{
-					$$ = makeSetOp(SETOP_UNION, $3, $1, $5);
+					$$ = makeSetOp(SETOP_UNION, $3, $4, $1, $5);
 				}
 			| select_clause INTERSECT opt_all opt_corresponding_clause select_clause
 				{
-					$$ = makeSetOp(SETOP_INTERSECT, $3, $1, $5);
+					$$ = makeSetOp(SETOP_INTERSECT, $3, $4, $1, $5);
 				}
 			| select_clause EXCEPT opt_all opt_corresponding_clause select_clause
 				{
-					$$ = makeSetOp(SETOP_EXCEPT, $3, $1, $5);
+					$$ = makeSetOp(SETOP_EXCEPT, $3, $4, $1, $5);
 				}
 		;
 
@@ -9438,8 +9438,9 @@ opt_all:	ALL										{ $$ = TRUE; }
 			| /*EMPTY*/								{ $$ = FALSE; }
 		;
 
-opt_corresponding_clause:
- 			CORRESPONDING							{} 			
+opt_corresponding_clause: 			
+ 			CORRESPONDING							{ $$ = list_make1(NIL); }
+ 			| /*EMPTY*/								{ $$ = NIL; } 			
  		;
 
 /* We use (NIL) as a placeholder to indicate that all target expressions
@@ -13314,12 +13315,13 @@ insertSelectOptions(SelectStmt *stmt,
 }
 
 static Node *
-makeSetOp(SetOperation op, bool all, Node *larg, Node *rarg)
+makeSetOp(SetOperation op, bool all, List *correspondingClause, Node *larg, Node *rarg)
 {
 	SelectStmt *n = makeNode(SelectStmt);
 
 	n->op = op;
 	n->all = all;
+	n->correspondingClause = correspondingClause;
 	n->larg = (SelectStmt *) larg;
 	n->rarg = (SelectStmt *) rarg;
 	return (Node *) n;
