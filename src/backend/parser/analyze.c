@@ -57,6 +57,9 @@ static Query *transformValuesClause(ParseState *pstate, SelectStmt *stmt);
 static Query *transformSetOperationStmt(ParseState *pstate, SelectStmt *stmt);
 static Node *transformSetOperationTree(ParseState *pstate, SelectStmt *stmt,
 		bool isTopLevel, List **targetlist);
+static SelectStmt *createSubqueryForCorresponding(List* outputColumns,
+		SelectStmt* main_arg);
+static List *determineMatchingColumns(List *ltargetlist, List *rtargetlist);
 static void determineRecursiveColTypes(ParseState *pstate, Node *larg,
 		List *nrtargetlist);
 static Query *transformUpdateStmt(ParseState *pstate, UpdateStmt *stmt);
@@ -1503,6 +1506,208 @@ transformSetOperationTree(ParseState *pstate, SelectStmt *stmt, bool isTopLevel,
 		false, &rtargetlist);
 
 		/*
+		 * If CORRESPONDING is specified, syntax and column name validities checked,
+		 * column filtering is done by a subquery later on.
+		 */
+		if(stmt->correspondingClause == NIL)
+		{
+			// No CORRESPONDING clause, no operation needed for column filtering.
+			op->correspondingColumns = stmt->correspondingClause;
+			op->hasCorrespondingBy = false;
+		}
+		else if(linitial(stmt->correspondingClause) == NULL)
+		{
+			// CORRESPONDING clause, find matching column names from both tables. If there are none then it is a syntax error.
+
+			Query	*largQuery;
+			Query	*rargQuery;
+			List	*matchingColumns;
+
+			/* Analyze left query to resolve column names. */
+			largQuery = parse_sub_analyze((Node *) stmt->larg, pstate, NULL, false);
+
+			/* Analyze right query to resolve column names. */
+			rargQuery = parse_sub_analyze((Node *) stmt->rarg, pstate, NULL, false);
+
+			/* Find matching columns from both queries. */
+			matchingColumns = determineMatchingColumns(largQuery->targetList,
+													   rargQuery->targetList);
+
+			op->correspondingColumns = matchingColumns;
+			op->hasCorrespondingBy = false;
+
+			/* If matchingColumns is empty, there is an error. At least one column in the select lists must have the same name. */
+			if(list_length(matchingColumns) == 0)
+			{
+				ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR),
+								errmsg("%s queries with a CORRESPONDING clause must have at least one column with the same name",
+								context)));
+			}
+
+
+			// Create subquery for larg, selecting column names from matchingColumns.
+			stmt->larg = createSubqueryForCorresponding(matchingColumns, stmt->larg);
+
+			// Assign newly generated query to original left query.
+			op->larg = transformSetOperationTree(pstate, stmt->larg,
+												 false,
+												 &ltargetlist);
+
+			// Create subquery for rarg, selecting column names from matchingColumns.
+			stmt->rarg = createSubqueryForCorresponding(matchingColumns, stmt->rarg);
+
+			// Assign newly generated query to original right query.
+			op->rarg = transformSetOperationTree(pstate, stmt->rarg,
+												 false,
+												 &rtargetlist);
+		}
+		else
+		{
+			// CORRESPONDING BY clause, find matching column names from both tables
+			// and intersect them with BY(...) column list. If there are none
+			// then it is a syntax error.
+
+			Query		*largQuery;
+			Query		*rargQuery;
+			List		*matchingColumns;
+			List		*matchingColumnsFiltered;
+			ListCell	*corrtl;
+			ListCell	*mctl;
+
+			/* Analyze left query to resolve column names. */
+			largQuery = parse_sub_analyze((Node *) stmt->larg, pstate, NULL, false);
+
+			/* Analyze right query to resolve column names. */
+			rargQuery = parse_sub_analyze((Node *) stmt->rarg, pstate, NULL, false);
+
+			/*
+			 * Find matching columns from both queries.
+			 * In CORRESPONDING BY, column names will be removed from
+			 * matchingColumns if they are not in the BY clause.
+			 * All columns in the BY clause must be in matchingColumns,
+			 * otherwise raise syntax error in BY clause.
+			 */
+
+			matchingColumns = determineMatchingColumns(largQuery->targetList,
+													   rargQuery->targetList);
+
+			/*
+			 * Every column name in correspondingClause must be in matchingColumns,
+			 * otherwise it is a syntax error.
+			 */
+			foreach(corrtl, stmt->correspondingClause)
+			{
+				Node* corrtle = lfirst(corrtl);
+				if (IsA(corrtle, ColumnRef) &&
+					list_length(((ColumnRef *) corrtle)->fields) == 1 &&
+					IsA(linitial(((ColumnRef *) corrtle)->fields), String))
+				{
+					/* Get column name from correspondingClause. */
+					char	   *name = strVal(linitial(((ColumnRef *) corrtle)->fields));
+					bool hasMatch = false;
+
+					foreach(mctl, matchingColumns)
+					{
+						TargetEntry *mctle = (TargetEntry *) lfirst(mctl);
+
+						Assert(mctle->resname != NULL);
+						Assert(name != NULL);
+
+						/* Compare correspondingClause column name with matchingColumns column names. */
+						if(strcmp(mctle->resname, name) == 0)
+						{
+							// we have a match.
+							hasMatch = true;
+							break;
+						}
+					}
+
+					if(!hasMatch)
+					{
+						/* CORRESPONDING BY clause contains a column name that is not in both tables. */
+						ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR),
+										errmsg("CORRESPONDING BY clause must only contain column names from both tables.")));
+					}
+
+				}
+				else
+				{
+					/* Only column names are supported, constants are syntax error in CORRESPONDING BY clause. */
+					ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR),
+									errmsg(
+									"%s queries with CORRESPONDING BY clause must have only column names and not constants or ordinals in the column name list.",
+									context)));
+				}
+			}
+
+			/* To preserve column ordering from correspondingClause and to remove
+			 * columns from matchingColumns if they are not in correspondingClause,
+			 * create a new list and finalize our column list for the
+			 * CORRESPONDING BY clause.
+			 */
+
+			matchingColumnsFiltered = NIL;
+
+			/* For each column in CORRESPONDING BY column list, check
+			 * column existence in matchingColumns.
+			 */
+			foreach(corrtl, stmt->correspondingClause)
+			{
+				Node* corrtle = lfirst(corrtl);
+
+				if (IsA(corrtle, ColumnRef) &&
+					list_length(((ColumnRef *) corrtle)->fields) == 1 &&
+					IsA(linitial(((ColumnRef *) corrtle)->fields), String))
+				{
+					char *name = strVal(linitial(((ColumnRef *) corrtle)->fields));
+
+					foreach(mctl, matchingColumns)
+					{
+						TargetEntry *mctle = (TargetEntry *) lfirst(mctl);
+
+						Assert(mctle->resname != NULL);
+						Assert(name != NULL);
+
+						if(strcmp(mctle->resname, name) == 0)
+						{
+							// we have a match.
+							matchingColumnsFiltered = lappend(matchingColumnsFiltered, mctle);
+							break;
+						}
+					}
+				}
+			}
+
+			/* If matchingColumnsFiltered is empty, there is a semantic error. At least one column in the select lists must have the same name. */
+			if(list_length(matchingColumnsFiltered) == 0)
+			{
+				ereport(ERROR, (errcode(ERRCODE_SYNTAX_ERROR),
+								errmsg("%s queries with CORRESPONDING BY clause must have at least one column name in BY clause and in both of the queries.",
+								context)));
+			}
+
+			op->correspondingColumns = matchingColumnsFiltered;
+			op->hasCorrespondingBy = true;
+
+
+			// Create subquery for larg, selecting only columns from matchingColumnsFiltered.
+			stmt->larg = createSubqueryForCorresponding(matchingColumnsFiltered, stmt->larg);
+
+			// Assign newly generated query to original left query.
+			op->larg = transformSetOperationTree(pstate, stmt->larg,
+												 false,
+												 &ltargetlist);
+
+			// Create subquery for rarg, selecting only columns from matchingColumnsFiltered.
+			stmt->rarg = createSubqueryForCorresponding(matchingColumnsFiltered, stmt->rarg);
+
+			// Assign newly generated query to original right query.
+			op->rarg = transformSetOperationTree(pstate, stmt->rarg,
+												 false,
+												 &rtargetlist);
+		}
+
+		/*
 		 * Verify that the two children have the same number of non-junk
 		 * columns, and determine the types of the merged output columns.
 		 */
@@ -1658,6 +1863,89 @@ transformSetOperationTree(ParseState *pstate, SelectStmt *stmt, bool isTopLevel,
 
 		return (Node *) op;
 	}
+}
+
+/*
+ * Returns a subquery selecting outputColumns from main_arg.
+ * main_arg is modified and returned.
+ */
+static SelectStmt *
+createSubqueryForCorresponding(List* outputColumns, SelectStmt* main_arg)
+{
+	ColumnRef *cr;
+	ResTarget *rt;
+	SelectStmt *n;
+
+	RangeSubselect * rss;
+	ListCell* mctl;
+
+	n = makeNode(SelectStmt);
+	n->targetList = NIL;
+	foreach(mctl, outputColumns)
+	{
+		TargetEntry *mctle = (TargetEntry *) lfirst(mctl);
+
+		cr = makeNode(ColumnRef);
+		cr->fields = list_make1(makeString(mctle->resname));
+		cr->location = -1;
+
+		rt = makeNode(ResTarget);
+		rt->name = NULL;
+		rt->indirection = NIL;
+		rt->val = (Node *)cr;
+		rt->location = -1;
+
+		n->targetList = lappend(n->targetList, rt);
+	}
+
+	rss = makeNode(RangeSubselect);
+
+	// XXX makeAlias alias name should be empty??
+	rss->alias = makeAlias("alias", NULL);
+	rss->subquery = (Node *)main_arg;
+
+	n->fromClause = list_make1(rss);
+
+	main_arg = n;
+
+	return main_arg;
+}
+
+
+/*
+ * Processes targetlists of two queries for column equivalence to use
+ * with UNION/INTERSECT/EXCEPT CORRESPONDING.
+ */
+static List *
+determineMatchingColumns(List *ltargetlist, List *rtargetlist)
+{
+	List		*matchingColumns = NIL;
+	ListCell	*ltl;
+	ListCell	*rtl;
+
+	foreach(ltl, ltargetlist)
+	{
+		foreach(rtl, rtargetlist)
+		{
+			TargetEntry *ltle = (TargetEntry *) lfirst(ltl);
+			TargetEntry *rtle = (TargetEntry *) lfirst(rtl);
+
+			elog(DEBUG4, "%s", ltle->resname);
+
+			/* Names of the columns must be resolved before calling this method. */
+			Assert(ltle->resname != NULL);
+			Assert(rtle->resname != NULL);
+
+			/* If column names are the same, append it to the result. */
+			if(strcmp(ltle->resname, rtle->resname) == 0)
+			{
+				matchingColumns = lappend(matchingColumns, ltle);
+				continue;
+			}
+		}
+	}
+
+	return matchingColumns;
 }
 
 /*
