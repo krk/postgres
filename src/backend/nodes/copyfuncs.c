@@ -2556,6 +2556,7 @@ _copySelectStmt(const SelectStmt *from)
 	COPY_SCALAR_FIELD(all);
 	COPY_NODE_FIELD(larg);
 	COPY_NODE_FIELD(rarg);
+	COPY_NODE_FIELD(correspondingClause);
 
 	return newnode;
 }
@@ -2569,6 +2570,8 @@ _copySetOperationStmt(const SetOperationStmt *from)
 	COPY_SCALAR_FIELD(all);
 	COPY_NODE_FIELD(larg);
 	COPY_NODE_FIELD(rarg);
+	COPY_NODE_FIELD(correspondingColumns);
+	COPY_SCALAR_FIELD(hasCorrespondingBy);
 	COPY_NODE_FIELD(colTypes);
 	COPY_NODE_FIELD(colTypmods);
 	COPY_NODE_FIELD(colCollations);
