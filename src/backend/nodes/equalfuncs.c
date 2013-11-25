@@ -932,6 +932,7 @@ _equalSelectStmt(const SelectStmt *a, const SelectStmt *b)
 	COMPARE_SCALAR_FIELD(all);
 	COMPARE_NODE_FIELD(larg);
 	COMPARE_NODE_FIELD(rarg);
+	COMPARE_NODE_FIELD(correspondingClause);
 
 	return true;
 }
@@ -943,6 +944,8 @@ _equalSetOperationStmt(const SetOperationStmt *a, const SetOperationStmt *b)
 	COMPARE_SCALAR_FIELD(all);
 	COMPARE_NODE_FIELD(larg);
 	COMPARE_NODE_FIELD(rarg);
+	COMPARE_NODE_FIELD(correspondingColumns);
+	COMPARE_SCALAR_FIELD(hasCorrespondingBy);
 	COMPARE_NODE_FIELD(colTypes);
 	COMPARE_NODE_FIELD(colTypmods);
 	COMPARE_NODE_FIELD(colCollations);

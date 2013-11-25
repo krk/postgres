@@ -2073,6 +2073,7 @@ _outSelectStmt(StringInfo str, const SelectStmt *node)
 	WRITE_BOOL_FIELD(all);
 	WRITE_NODE_FIELD(larg);
 	WRITE_NODE_FIELD(rarg);
+	WRITE_NODE_FIELD(correspondingClause);
 }
 
 static void
@@ -2348,6 +2349,8 @@ _outSetOperationStmt(StringInfo str, const SetOperationStmt *node)
 	WRITE_BOOL_FIELD(all);
 	WRITE_NODE_FIELD(larg);
 	WRITE_NODE_FIELD(rarg);
+	WRITE_NODE_FIELD(correspondingColumns);
+	WRITE_BOOL_FIELD(hasCorrespondingBy);
 	WRITE_NODE_FIELD(colTypes);
 	WRITE_NODE_FIELD(colTypmods);
 	WRITE_NODE_FIELD(colCollations);

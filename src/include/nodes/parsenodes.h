@@ -1125,8 +1125,9 @@ typedef struct SelectStmt
 	bool		all;			/* ALL specified? */
 	struct SelectStmt *larg;	/* left child */
 	struct SelectStmt *rarg;	/* right child */
-	List	   *correspondingClause; /* NULL or lcons(NIL, NIL) for
-			 						  *	CORRESPONDING */
+	List	   *correspondingClause; /* NULL, list of CORRESPONDING BY exprs,
+	 	 	 	 	 	 	 	 	  * or lcons(NIL, NIL) for CORRESPONDING
+	 	 	 	 	 	 	 	 	  */
 } SelectStmt;
 
 
@@ -1162,8 +1163,9 @@ typedef struct SetOperationStmt
 	 	 	 	 	 	 	 	 	   * clause. */
 	bool		hasCorrespondingBy;   /* If correspondingColumns is not NIL
 	 	 	 	 	 	 	 	 	   * then hasCorrespondingBy determines
-	 	 	 	 	 	 	 	 	   * its use as corresponding columns,
-	 	 	 	 	 	 	 	 	   * correspondingColumns is junk. */
+	 	 	 	 	 	 	 	 	   * its use as CORRESPONDING BY columns,
+	 	 	 	 	 	 	 	 	   * otherwise correspondingColumns is
+	 	 	 	 	 	 	 	 	   * junk. */
 
 	/* Fields derived during parse analysis: */
 	List	   *colTypes;		/* OID list of output column type OIDs */

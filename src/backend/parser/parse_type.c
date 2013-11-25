@@ -712,7 +712,8 @@ parseTypeString(const char *str, Oid *typeid_p, int32 *typmod_p)
 		stmt->limitCount != NULL ||
 		stmt->lockingClause != NIL ||
 		stmt->withClause != NULL ||
-		stmt->op != SETOP_NONE)
+		stmt->op != SETOP_NONE ||
+		stmt->correspondingClause != NIL)
 		goto fail;
 	if (list_length(stmt->targetList) != 1)
 		goto fail;

@@ -936,6 +936,8 @@ checkWellFormedSelectStmt(SelectStmt *stmt, CteState *cstate)
 											   cstate);
 				checkWellFormedRecursionWalker((Node *) stmt->rarg,
 											   cstate);
+				checkWellFormedRecursionWalker((Node *) stmt->correspondingClause,
+											   cstate);
 				cstate->context = save_context;
 				checkWellFormedRecursionWalker((Node *) stmt->sortClause,
 											   cstate);
@@ -954,6 +956,8 @@ checkWellFormedSelectStmt(SelectStmt *stmt, CteState *cstate)
 											   cstate);
 				cstate->context = RECURSION_EXCEPT;
 				checkWellFormedRecursionWalker((Node *) stmt->rarg,
+											   cstate);
+				checkWellFormedRecursionWalker((Node *) stmt->correspondingClause,
 											   cstate);
 				cstate->context = save_context;
 				checkWellFormedRecursionWalker((Node *) stmt->sortClause,
