@@ -639,3 +639,424 @@ select * from
 
 drop table t3;
 drop function expensivefunc(int);
+--
+-- CORRESPONDING clause tests
+--
+--
+-- UNION (also INTERSECT, EXCEPT) with CORRESPONDING.
+--
+-- Simple UNION CORRESPONDING constructs
+SELECT 1 AS two UNION CORRESPONDING SELECT 2 two;
+ two 
+-----
+   1
+   2
+(2 rows)
+
+SELECT 1 AS one UNION CORRESPONDING SELECT 1 one;
+ one 
+-----
+   1
+(1 row)
+
+SELECT 1 AS two UNION ALL CORRESPONDING SELECT 2 two;
+ two 
+-----
+   1
+   2
+(2 rows)
+
+SELECT 1 AS two UNION ALL CORRESPONDING SELECT 1 two;
+ two 
+-----
+   1
+   1
+(2 rows)
+
+SELECT 1 AS two UNION CORRESPONDING SELECT 2 two UNION CORRESPONDING SELECT 2 two;
+ two 
+-----
+   1
+   2
+(2 rows)
+
+SELECT 1 AS three UNION CORRESPONDING SELECT 2 three UNION ALL CORRESPONDING SELECT 2 three;
+ three 
+-------
+     1
+     2
+     2
+(3 rows)
+
+SELECT 1 AS three UNION CORRESPONDING SELECT 2 three UNION CORRESPONDING SELECT 3 three;
+ three 
+-------
+     1
+     2
+     3
+(3 rows)
+
+SELECT 1.1 AS two UNION SELECT 2.2 two;
+ two 
+-----
+ 1.1
+ 2.2
+(2 rows)
+
+SELECT 1 a, 2 b, 3 c UNION CORRESPONDING SELECT 4 a, 5 b, 6 c;
+ a | b | c 
+---+---+---
+ 1 | 2 | 3
+ 4 | 5 | 6
+(2 rows)
+
+SELECT 3 c, 2 b, 1 a UNION CORRESPONDING SELECT 6 c, 4 a, 5 b;
+ c | b | a 
+---+---+---
+ 3 | 2 | 1
+ 6 | 5 | 4
+(2 rows)
+
+-- Simple UNION CORRESPONDING BY constructs
+SELECT 1 a, 2 b, 3 c UNION CORRESPONDING BY(a) SELECT 4 a, 5 b, 6 c;
+ a 
+---
+ 1
+ 4
+(2 rows)
+
+SELECT 1 a, 2 b, 3 c UNION CORRESPONDING BY(b) SELECT 4 a, 5 b, 6 c;
+ b 
+---
+ 2
+ 5
+(2 rows)
+
+SELECT 1 a, 2 b, 3 c UNION CORRESPONDING BY(c) SELECT 4 a, 5 b, 6 c;
+ c 
+---
+ 3
+ 6
+(2 rows)
+
+SELECT 1 a, 2 b, 3 c UNION CORRESPONDING BY(a, b) SELECT 4 a, 5 b, 6 c;
+ a | b 
+---+---
+ 1 | 2
+ 4 | 5
+(2 rows)
+
+SELECT 1 a, 2 b, 3 c UNION CORRESPONDING BY(b, c) SELECT 4 a, 5 b, 6 c;
+ b | c 
+---+---
+ 2 | 3
+ 5 | 6
+(2 rows)
+
+SELECT 1 a, 2 b, 3 c UNION CORRESPONDING BY(a, c) SELECT 4 a, 5 b, 6 c;
+ a | c 
+---+---
+ 1 | 3
+ 4 | 6
+(2 rows)
+
+SELECT 1 a, 2 b, 3 c UNION CORRESPONDING BY(a, b, c) SELECT 4 a, 5 b, 6 c;
+ a | b | c 
+---+---+---
+ 1 | 2 | 3
+ 4 | 5 | 6
+(2 rows)
+
+-- CORRESPONDING column ordering, left clause's column ordering must be preserved.
+SELECT 1 a, 2 b, 3 c UNION CORRESPONDING SELECT 4 a, 5 b, 6 c;
+ a | b | c 
+---+---+---
+ 1 | 2 | 3
+ 4 | 5 | 6
+(2 rows)
+
+SELECT 2 b, 1 a, 3 c UNION CORRESPONDING SELECT 4 a, 5 b, 6 c;
+ b | a | c 
+---+---+---
+ 2 | 1 | 3
+ 5 | 4 | 6
+(2 rows)
+
+SELECT 1 a, 3 c, 2 b UNION CORRESPONDING SELECT 4 a, 5 b, 6 c;
+ a | c | b 
+---+---+---
+ 1 | 3 | 2
+ 4 | 6 | 5
+(2 rows)
+
+SELECT 1 a, 2 b, 3 c UNION CORRESPONDING SELECT 5 b, 6 c, 4 a;
+ a | b | c 
+---+---+---
+ 1 | 2 | 3
+ 4 | 5 | 6
+(2 rows)
+
+SELECT 2 b, 1 a, 3 c UNION CORRESPONDING SELECT 5 b, 6 c, 4 a;
+ b | a | c 
+---+---+---
+ 2 | 1 | 3
+ 5 | 4 | 6
+(2 rows)
+
+-- CORRESPONDING BY column ordering, BY clause column ordering must be preserved.
+SELECT 1 a, 2 b, 3 c UNION CORRESPONDING BY(a, b, c) SELECT 4 a, 5 b, 6 c;
+ a | b | c 
+---+---+---
+ 1 | 2 | 3
+ 4 | 5 | 6
+(2 rows)
+
+SELECT 1 a, 2 b, 3 c UNION CORRESPONDING BY(b, c, a) SELECT 4 a, 5 b, 6 c;
+ b | c | a 
+---+---+---
+ 2 | 3 | 1
+ 5 | 6 | 4
+(2 rows)
+
+SELECT 1 a, 2 b, 3 c UNION CORRESPONDING BY(c, a, b) SELECT 4 a, 5 b, 6 c;
+ c | a | b 
+---+---+---
+ 3 | 1 | 2
+ 6 | 4 | 5
+(2 rows)
+
+SELECT 1 a, 2 b, 3 c UNION CORRESPONDING BY(a, b, c) SELECT 5 b, 6 c, 4 a;
+ a | b | c 
+---+---+---
+ 1 | 2 | 3
+ 4 | 5 | 6
+(2 rows)
+
+SELECT 2 b, 3 c, 1 a UNION CORRESPONDING BY(b, c, a) SELECT 4 a, 5 b, 6 c;
+ b | c | a 
+---+---+---
+ 2 | 3 | 1
+ 5 | 6 | 4
+(2 rows)
+
+SELECT 3 c, 2 b, 1 a UNION CORRESPONDING BY(c, a, b) SELECT 4 a, 5 b, 6 c;
+ c | a | b 
+---+---+---
+ 3 | 1 | 2
+ 6 | 4 | 5
+(2 rows)
+
+--
+-- Try testing from tables...
+--
+SELECT f1 AS five FROM FLOAT8_TBL
+UNION CORRESPONDING
+SELECT f1 AS five FROM FLOAT8_TBL
+ORDER BY 1;
+         five          
+-----------------------
+ -1.2345678901234e+200
+               -1004.3
+                -34.84
+ -1.2345678901234e-200
+                     0
+(5 rows)
+
+SELECT f1 AS five FROM FLOAT8_TBL
+UNION CORRESPONDING BY(five)
+SELECT f1 AS five FROM FLOAT8_TBL
+ORDER BY 1;
+         five          
+-----------------------
+ -1.2345678901234e+200
+               -1004.3
+                -34.84
+ -1.2345678901234e-200
+                     0
+(5 rows)
+
+SELECT f1 AS ten FROM FLOAT8_TBL
+UNION ALL CORRESPONDING
+SELECT f1 AS ten FROM FLOAT8_TBL;
+          ten          
+-----------------------
+                     0
+                -34.84
+               -1004.3
+ -1.2345678901234e+200
+ -1.2345678901234e-200
+                     0
+                -34.84
+               -1004.3
+ -1.2345678901234e+200
+ -1.2345678901234e-200
+(10 rows)
+
+SELECT f1 AS nine FROM FLOAT8_TBL
+UNION CORRESPONDING
+SELECT f1 AS nine FROM INT4_TBL
+ORDER BY 1;
+         nine          
+-----------------------
+ -1.2345678901234e+200
+           -2147483647
+               -123456
+               -1004.3
+                -34.84
+ -1.2345678901234e-200
+                     0
+                123456
+            2147483647
+(9 rows)
+
+SELECT f1 AS ten FROM FLOAT8_TBL
+UNION ALL CORRESPONDING
+SELECT f1 AS ten FROM INT4_TBL;
+          ten          
+-----------------------
+                     0
+                -34.84
+               -1004.3
+ -1.2345678901234e+200
+ -1.2345678901234e-200
+                     0
+                123456
+               -123456
+            2147483647
+           -2147483647
+(10 rows)
+
+SELECT f1 AS five FROM FLOAT8_TBL
+  WHERE f1 BETWEEN -1e6 AND 1e6
+UNION CORRESPONDING
+SELECT f1 AS five FROM INT4_TBL
+  WHERE f1 BETWEEN 0 AND 1000000;
+         five          
+-----------------------
+               -1004.3
+                -34.84
+ -1.2345678901234e-200
+                     0
+                123456
+(5 rows)
+
+--
+-- INTERSECT and EXCEPT
+--
+SELECT q2 FROM int8_tbl INTERSECT CORRESPONDING SELECT q1 AS q2 FROM int8_tbl;
+        q2        
+------------------
+ 4567890123456789
+              123
+(2 rows)
+
+SELECT q2 FROM int8_tbl INTERSECT ALL CORRESPONDING SELECT q1 AS q2 FROM int8_tbl;
+        q2        
+------------------
+ 4567890123456789
+ 4567890123456789
+              123
+(3 rows)
+
+SELECT q2 FROM int8_tbl EXCEPT CORRESPONDING SELECT q1 AS q2 FROM int8_tbl ORDER BY 1;
+        q2         
+-------------------
+ -4567890123456789
+               456
+(2 rows)
+
+SELECT q2 FROM int8_tbl EXCEPT ALL CORRESPONDING SELECT q1 AS q2 FROM int8_tbl ORDER BY 1;
+        q2         
+-------------------
+ -4567890123456789
+               456
+(2 rows)
+
+SELECT q2 FROM int8_tbl EXCEPT ALL CORRESPONDING SELECT DISTINCT q1 AS q2 FROM int8_tbl ORDER BY 1;
+        q2         
+-------------------
+ -4567890123456789
+               456
+  4567890123456789
+(3 rows)
+
+SELECT q1 FROM int8_tbl EXCEPT CORRESPONDING SELECT q2 AS q1 FROM int8_tbl;
+ q1 
+----
+(0 rows)
+
+SELECT q1 FROM int8_tbl EXCEPT ALL CORRESPONDING SELECT q2 AS q1 FROM int8_tbl;
+        q1        
+------------------
+ 4567890123456789
+              123
+(2 rows)
+
+SELECT q1 FROM int8_tbl EXCEPT ALL CORRESPONDING SELECT DISTINCT q2 AS q1 FROM int8_tbl;
+        q1        
+------------------
+ 4567890123456789
+ 4567890123456789
+              123
+(3 rows)
+
+--
+-- Mixed types
+--
+SELECT f1 FROM float8_tbl INTERSECT CORRESPONDING SELECT f1 FROM int4_tbl;
+ f1 
+----
+  0
+(1 row)
+
+SELECT f1 FROM float8_tbl EXCEPT CORRESPONDING SELECT f1 FROM int4_tbl ORDER BY 1;
+          f1           
+-----------------------
+ -1.2345678901234e+200
+               -1004.3
+                -34.84
+ -1.2345678901234e-200
+(4 rows)
+
+--
+-- Subqueries with ORDER BY & LIMIT clauses
+--
+-- In this syntax, ORDER BY/LIMIT apply to the result of the EXCEPT
+SELECT q1,q2 FROM int8_tbl EXCEPT CORRESPONDING SELECT q2,q1 FROM int8_tbl
+ORDER BY q2,q1;
+ q1 | q2 
+----+----
+(0 rows)
+
+SELECT q1,q2 FROM int8_tbl EXCEPT CORRESPONDING BY(q1) SELECT q2,q1 FROM int8_tbl
+ORDER BY q1;
+ q1 
+----
+(0 rows)
+
+SELECT q1,q2 FROM int8_tbl EXCEPT CORRESPONDING BY(q2) SELECT q2,q1 FROM int8_tbl
+ORDER BY q2;
+ q2 
+----
+(0 rows)
+
+--
+-- Check handling of a case with unknown constants.  We don't guarantee
+-- an undecorated constant will work in all cases, but historically this
+-- usage has worked, so test we don't break it.
+--
+SELECT a.f1 FROM (SELECT 'test' AS f1 FROM varchar_tbl) a
+UNION CORRESPONDING
+SELECT b.f1 FROM (SELECT f1 FROM varchar_tbl) b
+ORDER BY 1;
+  f1  
+------
+ a
+ ab
+ abcd
+ test
+(4 rows)
+
+-- This should fail, but it should produce an error cursor
+SELECT '3.4'::numeric AS a UNION CORRESPONDING SELECT 'foo' AS a;
+ERROR:  failed to find conversion function from unknown to numeric
