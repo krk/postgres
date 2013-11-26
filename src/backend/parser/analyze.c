@@ -1164,11 +1164,6 @@ transformSetOperationStmt(ParseState *pstate, SelectStmt *stmt) {
 
 	qry->commandType = CMD_SELECT;
 
-	ereport(NOTICE,
-			(errmsg("correspondingClause is NIL: %d", stmt->correspondingClause == NIL ? 1 : 0 )));
-	ereport(NOTICE,
-			(errmsg("correspondingClause length: %d", length(stmt->correspondingClause))));
-
 	/*
 	 * Find leftmost leaf SelectStmt.  We currently only need to do this in
 	 * order to deliver a suitable error message if there's an INTO clause
