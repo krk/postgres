@@ -403,6 +403,9 @@ static char *generate_function_name(Oid funcid, int nargs,
 static char *generate_operator_name(Oid operid, Oid arg1, Oid arg2);
 static text *string_to_text(char *str);
 static char *flatten_reloptions(Oid relid);
+static Query *unwrap_corresponding_subquery(Query *query, RangeTblRef *rtr);
+static void get_unwrapped_corresponding_subquery(Node *set_op_arg,
+				Query *query, deparse_context *context);
 
 #define only_marker(rte)  ((rte)->inh ? "" : "ONLY ")
 
@@ -4562,11 +4565,24 @@ get_setop_query(Node *setOp, Query *query, deparse_context *context,
 	else if (IsA(setOp, SetOperationStmt))
 	{
 		SetOperationStmt *op = (SetOperationStmt *) setOp;
+		bool hasCorresponding = FALSE;
+		bool hasCorrespondingBy = FALSE;
 
 		if (PRETTY_INDENT(context))
 		{
 			context->indentLevel += PRETTYINDENT_STD;
 			appendStringInfoSpaces(buf, PRETTYINDENT_STD);
+		}
+
+		/*
+		 * Find out if query has a CORRESPONDING clause. If so, we have to
+		 * strip the outer queries in op->larg and op->rarg, which should be inserted
+		 * in transformSetOperationTree routine.
+		 */
+		if (op->correspondingColumns != NIL)
+		{
+			hasCorresponding = true;
+			hasCorrespondingBy = op->hasCorrespondingBy;
 		}
 
 		/*
@@ -4579,7 +4595,12 @@ get_setop_query(Node *setOp, Query *query, deparse_context *context,
 
 		if (need_paren)
 			appendStringInfoChar(buf, '(');
-		get_setop_query(op->larg, query, context, resultDesc);
+
+		if(hasCorresponding)
+			get_unwrapped_corresponding_subquery(op->larg, query, context);
+		else
+			get_setop_query(op->larg, query, context, resultDesc);
+
 		if (need_paren)
 			appendStringInfoChar(buf, ')');
 
@@ -4606,6 +4627,45 @@ get_setop_query(Node *setOp, Query *query, deparse_context *context,
 		if (op->all)
 			appendStringInfoString(buf, "ALL ");
 
+		if (hasCorresponding)
+		{
+			if(hasCorrespondingBy)
+			{
+				ListCell	*tl;
+				int len_col_names;
+				const char *corresponding_by = "CORRESPONDING BY (";
+				char *result;
+
+				int max_col_names_len = list_length(op->correspondingColumns) * (NAMEDATALEN + 2) + 1;
+				char *csv_col_names = (char *)palloc(max_col_names_len);
+				csv_col_names[0] = '\0';
+
+
+				foreach(tl, op->correspondingColumns)
+				{
+					TargetEntry *tle = (TargetEntry *) lfirst(tl);
+					strcat(csv_col_names, tle->resname);
+					strcat(csv_col_names, ", ");
+				}
+
+				len_col_names = strnlen(csv_col_names, max_col_names_len);
+				csv_col_names[len_col_names - 2] = ')';
+
+				result = (char *) palloc(strlen(corresponding_by) + len_col_names + 1);
+
+				strcpy(result, corresponding_by);
+				strncat(result, csv_col_names, len_col_names);
+
+				appendContextKeyword(context, result,
+						-PRETTYINDENT_STD, PRETTYINDENT_STD, 0);
+			}
+			else
+			{
+				appendContextKeyword(context, "CORRESPONDING ",
+						-PRETTYINDENT_STD, PRETTYINDENT_STD, 0);
+			}
+		}
+
 		if (PRETTY_INDENT(context))
 			appendContextKeyword(context, "", 0, 0, 0);
 
@@ -4613,7 +4673,12 @@ get_setop_query(Node *setOp, Query *query, deparse_context *context,
 
 		if (need_paren)
 			appendStringInfoChar(buf, '(');
-		get_setop_query(op->rarg, query, context, resultDesc);
+
+		if(hasCorresponding)
+			get_unwrapped_corresponding_subquery(op->rarg, query, context);
+		else
+			get_setop_query(op->rarg, query, context, resultDesc);
+
 		if (need_paren)
 			appendStringInfoChar(buf, ')');
 
@@ -4625,6 +4690,65 @@ get_setop_query(Node *setOp, Query *query, deparse_context *context,
 		elog(ERROR, "unrecognized node type: %d",
 			 (int) nodeTag(setOp));
 	}
+}
+
+/*
+ * Unwrap left and right arguments of a SetOperationStmt query which has a
+ * CORRESPONDING clause.
+ */
+static void
+get_unwrapped_corresponding_subquery(Node *set_op_arg, Query *query,
+		deparse_context *context)
+{
+	RangeTblRef *rtr;
+	Query *subquery;
+
+	Assert(IsA(set_op_arg, RangeTblRef));
+
+	rtr = (RangeTblRef *)set_op_arg;
+
+	/* unwrap larg or rarg of the SetOperationStmt. */
+	subquery = unwrap_corresponding_subquery(query, rtr);
+	get_from_clause(subquery, "", context);
+}
+
+/*
+ * Unwrap a single RangeTblRef of a SetOperationStmt query which has a
+ * CORRESPONDING clause.
+ */
+static Query *
+unwrap_corresponding_subquery(Query *query, RangeTblRef *rtr)
+{
+	RangeTblEntry *rte = rt_fetch(rtr->rtindex, query->rtable);
+
+	/* Subquery to unwrap. */
+	Query	   *subquery = rte->subquery;
+	Node	   *jtnode;
+
+	Assert(subquery != NULL);
+	Assert(list_length(subquery->jointree->fromlist) == 1);
+
+	jtnode = lfirst(list_head(subquery->jointree->fromlist));
+
+	if (IsA(jtnode, RangeTblRef))
+	{
+		RangeTblRef *rtr_sub = (RangeTblRef *)jtnode;
+		RangeTblEntry *rte_sub;
+
+		int varno = rtr_sub->rtindex;
+
+		Assert(varno > 0 && varno <= list_length(subquery->rtable));
+		rte_sub = (RangeTblEntry *) list_nth(subquery->rtable, varno - 1);
+
+		Assert(rte_sub->alias != NULL);
+		/* "alias" name is referenced in transformSetOperationTree. */
+		Assert(memcmp(rte_sub->alias->aliasname, "alias", 6) == 0);
+
+		/* Empty alias of the subquery fromClause. */
+		rte_sub->alias = NULL;
+	}
+
+	return subquery;
 }
 
 /*
