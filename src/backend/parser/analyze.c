@@ -1957,6 +1957,7 @@ transformSetOperationTree(ParseState *pstate, SelectStmt *stmt,
 
 		op->op = stmt->op;
 		op->all = stmt->all;
+		op->correspondingNames = stmt->correspondingNames;
 
 		/*
 		 * Recursively transform the left child node.

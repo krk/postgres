@@ -3135,6 +3135,7 @@ _copySetOperationStmt(const SetOperationStmt *from)
 	COPY_SCALAR_FIELD(all);
 	COPY_NODE_FIELD(larg);
 	COPY_NODE_FIELD(rarg);
+	COPY_NODE_FIELD(correspondingNames);
 	COPY_NODE_FIELD(colTypes);
 	COPY_NODE_FIELD(colTypmods);
 	COPY_NODE_FIELD(colCollations);

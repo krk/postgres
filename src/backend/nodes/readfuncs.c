@@ -443,6 +443,7 @@ _readSetOperationStmt(void)
 	READ_BOOL_FIELD(all);
 	READ_NODE_FIELD(larg);
 	READ_NODE_FIELD(rarg);
+	READ_NODE_FIELD(correspondingNames);
 	READ_NODE_FIELD(colTypes);
 	READ_NODE_FIELD(colTypmods);
 	READ_NODE_FIELD(colCollations);

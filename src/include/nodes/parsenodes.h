@@ -1638,7 +1638,10 @@ typedef struct SetOperationStmt
 	bool		all;			/* ALL specified? */
 	Node	   *larg;			/* left child */
 	Node	   *rarg;			/* right child */
-	/* Eventually add fields for CORRESPONDING spec here */
+
+	/* correspondingNames is NIL for no clause, lcons(NIL, NIL) for
+	* CORRESPONDING, name_list for CORRESPONDING BY */
+	List		*correspondingNames;
 
 	/* Fields derived during parse analysis: */
 	List	   *colTypes;		/* OID list of output column type OIDs */
