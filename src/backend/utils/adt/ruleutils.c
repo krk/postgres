@@ -5788,6 +5788,27 @@ get_setop_query(Node *setOp, Query *query, deparse_context *context,
 		if (op->all)
 			appendStringInfoString(buf, "ALL ");
 
+		if(op->correspondingNames) {
+			if(linitial(op->correspondingNames) == NULL)
+				appendStringInfoString(buf, "CORRESPONDING ");
+			else {
+				ListCell   *l;
+
+				appendStringInfoString(buf, "CORRESPONDING BY (");
+				foreach(l, op->correspondingNames)
+				{
+					Value	*name = lfirst(l);
+					Assert(IsA(name, String));
+					appendStringInfoString(buf, name->val.str); // FIXME quote if necessary, e.g. if the name contains spaces.
+					if(name != llast(op->correspondingNames))
+						appendStringInfoString(buf, ", ");
+				}
+
+				appendStringInfoString(buf, ")");
+			}
+		}
+
+
 		/* Always parenthesize if RHS is another setop */
 		need_paren = IsA(op->rarg, SetOperationStmt);
 
