@@ -1605,7 +1605,10 @@ typedef struct SelectStmt
 	bool		all;			/* ALL specified? */
 	struct SelectStmt *larg;	/* left child */
 	struct SelectStmt *rarg;	/* right child */
-	/* Eventually add fields for CORRESPONDING spec here */
+
+	/* correspondingNames is NIL for no clause, lcons(NIL, NIL) for
+	* CORRESPONDING, name_list for CORRESPONDING BY */
+	List		*correspondingNames;
 } SelectStmt;
 
 

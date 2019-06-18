@@ -167,7 +167,7 @@ static void insertSelectOptions(SelectStmt *stmt,
 								Node *limitOffset, Node *limitCount,
 								WithClause *withClause,
 								core_yyscan_t yyscanner);
-static Node *makeSetOp(SetOperation op, bool all, Node *larg, Node *rarg);
+static Node *makeSetOp(SetOperation op, bool all, List *correspondingNames, Node *larg, Node *rarg);
 static Node *doNegate(Node *n, int location);
 static void doNegateFloat(Value *v);
 static Node *makeAndExpr(Node *lexpr, Node *rexpr, int location);
@@ -11360,15 +11360,15 @@ simple_select:
 				}
 			| select_clause UNION all_or_distinct opt_corresponding_clause select_clause
 				{
-					$$ = makeSetOp(SETOP_UNION, $3, $1, $5);
+					$$ = makeSetOp(SETOP_UNION, $3, $4, $1, $5);
 				}
 			| select_clause INTERSECT all_or_distinct opt_corresponding_clause select_clause
 				{
-					$$ = makeSetOp(SETOP_INTERSECT, $3, $1, $5);
+					$$ = makeSetOp(SETOP_INTERSECT, $3, $4, $1, $5);
 				}
 			| select_clause EXCEPT all_or_distinct opt_corresponding_clause select_clause
 				{
-					$$ = makeSetOp(SETOP_EXCEPT, $3, $1, $5);
+					$$ = makeSetOp(SETOP_EXCEPT, $3, $4, $1, $5);
 				}
 		;
 
@@ -11532,9 +11532,9 @@ opt_all_clause:
 		;
 
 opt_corresponding_clause:
-			CORRESPONDING BY '(' name_list ')'		{}
-			| CORRESPONDING							{}
-			| /*EMPTY*/								{}
+			CORRESPONDING BY '(' name_list ')'		{ $$ = $4; }
+			| CORRESPONDING							{ $$ = list_make1(NIL); }
+			| /*EMPTY*/								{ $$ = NIL; }
 		;
 
 opt_sort_clause:
@@ -15914,12 +15914,13 @@ insertSelectOptions(SelectStmt *stmt,
 }
 
 static Node *
-makeSetOp(SetOperation op, bool all, Node *larg, Node *rarg)
+makeSetOp(SetOperation op, bool all, List *correspondingNames, Node *larg, Node *rarg)
 {
 	SelectStmt *n = makeNode(SelectStmt);
 
 	n->op = op;
 	n->all = all;
+	n->correspondingNames = correspondingNames;
 	n->larg = (SelectStmt *) larg;
 	n->rarg = (SelectStmt *) rarg;
 	return (Node *) n;
