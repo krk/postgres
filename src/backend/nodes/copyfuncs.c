@@ -3121,6 +3121,7 @@ _copySelectStmt(const SelectStmt *from)
 	COPY_SCALAR_FIELD(all);
 	COPY_NODE_FIELD(larg);
 	COPY_NODE_FIELD(rarg);
+	COPY_NODE_FIELD(correspondingNames);
 
 	return newnode;
 }
